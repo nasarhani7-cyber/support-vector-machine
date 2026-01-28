@@ -1,0 +1,414 @@
+---
+title: "SVM Assignment"
+author: "Hani Nasar"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE, error = FALSE, warning=FALSE}
+# Load the necessary library
+library(ISLR)
+
+# Load the Auto dataset from the ISLR package
+data(Auto)
+```
+
+# Question 7 Part (a)
+
+```{r, results = "hide"}
+# Calculating the median mileage
+median_mpg <- median(Auto$mpg, na.rm = TRUE)
+
+# Creating the binary variable
+Auto$high_mileage <- ifelse(Auto$mpg > median_mpg, 1, 0)
+```
+
+High Mileage Cars: Cars with mpg greater than the median value of the dataset are classified as having high mileage (1).
+
+Low Mileage Cars: Cars with mpg less than or equal to the median value are classified as having low mileage (0).
+
+## Part (b)
+
+```{r, error = FALSE, warning=FALSE}
+library(e1071)
+# Fit SVM with different cost values and perform cross-validation
+cost_values <- c(0.01, 0.1, 1, 10, 100)
+error_rates <- sapply(cost_values, function(c) {
+  svm_model <- svm(high_mileage ~ ., data = Auto, type = 'C-classification', kernel = 'linear', cost = c, cross = 10)
+  1 - mean(svm_model$accuracies) / 100
+})
+
+# Create a table with error rates
+error_table <- data.frame(Cost = cost_values, Error_Rate = error_rates)
+```
+
+```{r, echo = FALSE}
+library(knitr)
+# Display the table using knitr::kable
+kable(error_table, caption = "SVM Cross-Validation Error Rates")
+```
+
+The table of SVM cross-validation error rates indicates that the model performs best with a cost value of 1, achieving the lowest error rate of 0.0126, or about 1.26% incorrect predictions. As the cost increases to 10 and 100, the error rates rise to 0.0179 and 0.0332, respectively, suggesting that very high cost values might lead to overfitting. Conversely, lower cost values of 0.01 and 0.1 result in higher error rates of 0.074 and 0.056, respectively. Thus, a cost value of 1 provides the optimal balance between bias and variance, ensuring the best generalization to new data.
+
+## Part (c)
+
+```{r, warning = FALSE, error=FALSE}
+# Define cost, gamma, and degree values
+cost_values <- c(0.01, 0.1, 1, 10, 100)
+gamma_values <- c(0.01, 0.1, 1, 10)
+degree_values <- c(2, 3, 4, 5)
+
+# Function to perform SVM with RBF kernel and cross-validation
+svm_rbf_cv <- function(c, g) {
+  cv_results <- tune(svm, high_mileage ~ ., data = Auto, 
+                     ranges = list(cost = c, gamma = g), kernel = "radial", cross = 10)
+  return(data.frame(cost = c, gamma = g, error = cv_results$best.performance))
+}
+
+# Function to perform SVM with Polynomial kernel and cross-validation
+svm_poly_cv <- function(c, d) {
+  cv_results <- tune(svm, high_mileage ~ ., data = Auto, 
+                     ranges = list(cost = c, degree = d), kernel = "polynomial", cross = 10)
+  return(data.frame(cost = c, degree = d, error = cv_results$best.performance))
+}
+```
+
+```{r, echo = FALSE, warning=FALSE, error=FALSE, results = "hide"}
+
+# Perform SVM with RBF kernel
+rbf_results <- do.call(rbind, lapply(cost_values, function(c) {
+  do.call(rbind, lapply(gamma_values, function(g) {
+    svm_rbf_cv(c, g)
+  }))
+}))
+
+# Perform SVM with Polynomial kernel
+poly_results <- do.call(rbind, lapply(cost_values, function(c) {
+  do.call(rbind, lapply(degree_values, function(d) {
+    svm_poly_cv(c, d)
+  }))
+}))
+
+# Print results
+list(RBF_Results = rbf_results, Polynomial_Results = poly_results)
+```
+
+```{r, warning = FALSE, error = FALSE, echo = FALSE}
+
+# Display the results using knitr::kable
+kable(rbf_results, caption = "SVM Cross-Validation Results with RBF Kernel")
+```
+
+RBF Kernel:
+
+- The error rate decreases as the cost value increases from 0.01 to 10, indicating better performance with higher cost values.
+- The lowest error rate of 0.0381 is achieved with a cost value of 10 and gamma value of 0.10, suggesting that this combination provides the best performance for the RBF kernel.
+- Higher gamma values tend to increase the error rate, indicating potential overfitting.
+
+```{r, warning = FALSE, error = FALSE, echo = FALSE}
+
+kable(poly_results, caption = "SVM Cross-Validation Results with Polynomial Kernel")
+```
+
+Polynomial Kernel:
+
+- The error rates are generally higher compared to the RBF kernel, indicating that the polynomial kernel might not be as suitable for this dataset.
+- The lowest error rate of 0.2008 is achieved with a cost value of 100 and degree of 3, indicating that higher cost values and moderate degree values work better for the polynomial kernel.
+- Increasing the degree beyond 3 does not consistently improve performance and often increases the error rate.
+
+## Part (d)
+
+```{r, include = FALSE}
+# Ensure data frames are correctly formatted
+rbf_df <- as.data.frame(rbf_results)
+poly_df <- as.data.frame(poly_results)
+names(rbf_df) <- c("cost", "gamma", "error")
+names(poly_df) <- c("cost", "degree", "error")
+
+# Ensure factors are set for plotting
+rbf_df$cost <- as.factor(rbf_df$cost)
+rbf_df$gamma <- as.factor(rbf_df$gamma)
+poly_df$cost <- as.factor(poly_df$cost)
+poly_df$degree <- as.factor(poly_df$degree)
+```
+
+```{r, echo = FALSE}
+
+library(ggplot2)
+# Plot for RBF Kernel Results
+rbf_plot <- ggplot(rbf_df, aes(x = gamma, y = error, group = cost, color = cost)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Error Rates by Cost and Gamma for RBF Kernel",
+       x = "Gamma",
+       y = "Error Rate",
+       color = "Cost") +
+  theme_minimal()
+
+# Plot for Polynomial Kernel Results
+poly_plot <- ggplot(poly_df, aes(x = degree, y = error, group = cost, color = cost)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Error Rates by Cost and Degree for Polynomial Kernel",
+       x = "Degree",
+       y = "Error Rate",
+       color = "Cost") +
+  theme_minimal()
+
+# Display plots side by side
+par(mfrow = c(1, 2))
+print(rbf_plot)
+print(poly_plot)
+```
+
+The comparison of SVM cross-validation error rates for RBF and Polynomial kernels reveals distinct performance patterns. The RBF kernel demonstrates lower error rates overall, with the best performance at a cost value of 10 and gamma value of 0.10, where the error rate is minimal. In contrast, the Polynomial kernel shows consistently higher error rates, with the lowest error observed at a cost value of 100 and degree of 3. The RBF kernel's error rates increase significantly with higher gamma values, indicating overfitting, while the Polynomial kernel's error rates are relatively stable across different degrees but remain higher than those of the RBF kernel. Thus, the RBF kernel is generally more effective for this dataset, offering better predictive performance with optimized cost and gamma values.
+
+# Question 8 Part (a)
+
+```{r, warning = FALSE, error = FALSE}
+library(ISLR)
+data(OJ)
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Create a training set containing a random sample of 800 observations
+training_indices <- sample(1:nrow(OJ), 800)
+train_data <- OJ[training_indices, ]
+
+# Create a test set containing the remaining observations
+test_data <- OJ[-training_indices, ]
+
+# Display the dimensions of the training and test sets
+dim(train_data)
+dim(test_data)
+```
+
+## Part (b)
+
+```{r, error = FALSE, warning = FALSE}
+# Load the necessary library
+library(e1071)
+
+# Fit a support vector classifier to the training data
+svm_model <- svm(Purchase ~ ., data = train_data, type = 'C-classification', kernel = 'linear', cost = 0.01)
+
+# Produce summary statistics
+summary(svm_model)
+```
+
+The number of Support Vectors are 442, which are the data points that the model uses to define the decision boundary. This is quite high, indicating that many points are close to the decision boundary.
+
+## Part (c)
+
+```{r, warning = FALSE, error = FALSE}
+# Predict on training data
+train_pred <- predict(svm_model, train_data)
+
+# Predict on test data
+test_pred <- predict(svm_model, test_data)
+
+# Calculate training error rate
+train_error <- mean(train_pred != train_data$Purchase)
+
+# Calculate test error rate
+test_error <- mean(test_pred != test_data$Purchase)
+
+# Print error rates
+train_error
+test_error
+```
+
+The training error rate of 16.5% indicates that the SVM model misclassifies 16.5% of the training data. The test error rate of 17.78% indicates that the model misclassifies 17.78% of the test data. These error rates are relatively close, suggesting that the model has a good generalization performance and is not overfitting the training data.
+
+## Part (d)
+
+```{r, error = FALSE, warning = FALSE}
+# Use the tune function to select an optimal cost
+tune_result <- tune(svm, Purchase ~ ., data = train_data, 
+                    ranges = list(cost = seq(0.01, 10, by = 0.5)), 
+                    kernel = "linear")
+
+# Summary of tuning results
+summary(tune_result)
+
+# Best cost value
+best_cost <- tune_result$best.parameters$cost
+best_cost
+```
+
+The tuning results indicate that the best cost value is 2.51. This cost value minimizes the cross-validation error and is likely to improve the model's performance on the test set.
+
+## Part (e)
+
+```{r, error = FALSE, warning = FALSE}
+# Fit the SVM model using the best cost value
+svm_best_model <- svm(Purchase ~ ., data = train_data, type = 'C-classification', kernel = 'linear', cost = best_cost)
+
+# Predict on training data with the best model
+train_pred_best <- predict(svm_best_model, train_data)
+
+# Predict on test data with the best model
+test_pred_best <- predict(svm_best_model, test_data)
+
+# Calculate training error rate with the best model
+train_error_best <- mean(train_pred_best != train_data$Purchase)
+
+# Calculate test error rate with the best model
+test_error_best <- mean(test_pred_best != test_data$Purchase)
+
+# Print error rates
+train_error_best
+test_error_best
+```
+
+The training error rate of 16% and the test error rate of 15.56% indicate that the model with the best cost value has slightly improved performance compared to the initial model with a cost of 0.01. The test error rate has decreased from 17.78% to 15.56%, demonstrating better generalization to new data.
+
+## Part (f)
+
+```{r, warning = FALSE, error = FALSE}
+# Fit a support vector classifier to the training data using a radial kernel
+svm_radial_model <- svm(Purchase ~ ., data = train_data, type = 'C-classification', kernel = 'radial', cost = 0.01)
+
+# Predict on training data with radial kernel
+train_pred_radial <- predict(svm_radial_model, train_data)
+
+# Predict on test data with radial kernel
+test_pred_radial <- predict(svm_radial_model, test_data)
+
+# Calculate training error rate with radial kernel
+train_error_radial <- mean(train_pred_radial != train_data$Purchase)
+
+# Calculate test error rate with radial kernel
+test_error_radial <- mean(test_pred_radial != test_data$Purchase)
+
+# Print error rates
+train_error_radial
+test_error_radial
+```
+
+The error rates with the radial kernel are significantly higher compared to the linear kernel, indicating that the radial kernel with the default parameters is not performing as well for this dataset.
+
+```{r, error = FALSE, warning = FALSE}
+# Use the tune function to select an optimal cost for the radial kernel
+tune_result_radial <- tune(svm, Purchase ~ ., data = train_data, 
+                           ranges = list(cost = seq(0.01, 10, by = 0.5)), 
+                           kernel = "radial")
+
+# Summary of tuning results
+summary(tune_result_radial)
+
+# Best cost value for radial kernel
+best_cost_radial <- tune_result_radial$best.parameters$cost
+best_cost_radial
+```
+
+The tuning results indicate that the best cost value for the radial kernel is 1.01. This value should provide better performance than the default cost value.
+
+```{r, error = FALSE, warning = FALSE}
+# Fit the SVM model using the best cost value for the radial kernel
+svm_radial_best_model <- svm(Purchase ~ ., data = train_data, type = 'C-classification', kernel = 'radial', cost = best_cost_radial)
+
+# Predict on training data with the best radial model
+train_pred_radial_best <- predict(svm_radial_best_model, train_data)
+
+# Predict on test data with the best radial model
+test_pred_radial_best <- predict(svm_radial_best_model, test_data)
+
+# Calculate training error rate with the best radial model
+train_error_radial_best <- mean(train_pred_radial_best != train_data$Purchase)
+
+# Calculate test error rate with the best radial model
+test_error_radial_best <- mean(test_pred_radial_best != test_data$Purchase)
+
+# Print error rates
+train_error_radial_best
+test_error_radial_best
+```
+
+The training error rate of 13.88% indicates that the radial kernel model with the optimized cost value performs better on the training data compared to the initial radial kernel model. However, the test error rate of 18.89% is higher than the test error rate with the linear kernel optimized model (15.56%). This suggests that the radial kernel, even with the optimized cost value, does not generalize as well to new data as the linear kernel.
+
+## Part (g)
+
+```{r, error = FALSE, warning = FALSE}
+# Fit a support vector classifier to the training data using a polynomial kernel with degree 2
+svm_poly_model <- svm(Purchase ~ ., data = train_data, type = 'C-classification', kernel = 'polynomial', degree = 2, cost = 0.01)
+
+# Predict on training data with polynomial kernel
+train_pred_poly <- predict(svm_poly_model, train_data)
+
+# Predict on test data with polynomial kernel
+test_pred_poly <- predict(svm_poly_model, test_data)
+
+# Calculate training error rate with polynomial kernel
+train_error_poly <- mean(train_pred_poly != train_data$Purchase)
+
+# Calculate test error rate with polynomial kernel
+test_error_poly <- mean(test_pred_poly != test_data$Purchase)
+
+# Print error rates
+train_error_poly
+test_error_poly
+```
+
+The error rates with the polynomial kernel (degree = 2) and a cost of 0.01 are quite high, indicating that this model is not performing well on this dataset.
+
+```{r, error = FALSE, warning = FALSE}
+# Use the tune function to select an optimal cost for the polynomial kernel with degree 2
+tune_result_poly <- tune(svm, Purchase ~ ., data = train_data, 
+                         ranges = list(cost = seq(0.01, 10, by = 0.5)), 
+                         kernel = "polynomial", degree = 2)
+
+# Summary of tuning results
+summary(tune_result_poly)
+
+# Best cost value for polynomial kernel
+best_cost_poly <- tune_result_poly$best.parameters$cost
+best_cost_poly
+```
+
+The tuning results indicate that the best cost value for the polynomial kernel (degree = 2) is 6.51. This value should provide better performance than the initial cost value of 0.01.
+
+```{r, error = FALSE, warning = FALSE}
+# Fit the SVM model using the best cost value for the polynomial kernel
+svm_poly_best_model <- svm(Purchase ~ ., data = train_data, type = 'C-classification', kernel = 'polynomial', degree = 2, cost = best_cost_poly)
+
+# Predict on training data with the best polynomial model
+train_pred_poly_best <- predict(svm_poly_best_model, train_data)
+
+# Predict on test data with the best polynomial model
+test_pred_poly_best <- predict(svm_poly_best_model, test_data)
+
+# Calculate training error rate with the best polynomial model
+train_error_poly_best <- mean(train_pred_poly_best != train_data$Purchase)
+
+# Calculate test error rate with the best polynomial model
+test_error_poly_best <- mean(test_pred_poly_best != test_data$Purchase)
+
+# Print error rates
+train_error_poly_best
+test_error_poly_best
+```
+
+The training error rate of 14.13% indicates that the polynomial kernel model with the optimized cost value performs well on the training data. However, the test error rate of 19.63% is higher than the test error rate with the optimized linear kernel (15.56%), suggesting that the polynomial kernel does not generalize as well to new data as the linear kernel.
+
+## Part (h)
+
+Based on the results obtained from the three different kernels (linear, radial, and polynomial), the linear kernel with a cost value of 2.51 provides the best performance with the lowest test error rate of 15.56%. Both the radial and polynomial kernels, even after tuning the cost parameters, result in higher test error rates, indicating that the linear kernel is the most suitable for this dataset.
+
+Linear Kernel (best cost = 2.51):
+
+Training Error Rate: 16%
+Test Error Rate: 15.56%
+
+Radial Kernel (best cost = 1.01):
+
+Training Error Rate: 13.88%
+Test Error Rate: 18.89%
+
+Polynomial Kernel (degree = 2, best cost = 6.51):
+
+Training Error Rate: 14.13%
+Test Error Rate: 19.63%
+
+The linear kernel not only provides a good balance between training and test error rates but also achieves the lowest test error rate, making it the best approach for this particular dataset.
